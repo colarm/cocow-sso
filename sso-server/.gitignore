@@ -1,0 +1,38 @@
+# .gitignore
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+.DS_Store
+.github/
+
+# 环境变量与密钥
+.env
+*.pem
+*.key
+*.p12
+*.jks
+keystore.*
+application-local.properties
+
+# 日志
+logs/
+*.log
+
+# 临时文件
+*.tmp
+*.bak

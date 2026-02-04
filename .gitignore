@@ -1,6 +1,11 @@
 # Compiled class file
 *.class
 
+# IDE
+.vscode/
+.idea/
+*.iml
+
 # Log file
 *.log
 
