@@ -5,7 +5,6 @@ import java.io.IOException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
-import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,20 +12,33 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import static site.cocow.sso.infrastructure.security.SecurityConstants.REQUEST_USERNAME_KEY;
+import static site.cocow.sso.infrastructure.security.SecurityConstants.REQUEST_USER_ID_KEY;
+import static site.cocow.sso.infrastructure.security.SecurityConstants.SESSION_USERNAME_KEY;
+import static site.cocow.sso.infrastructure.security.SecurityConstants.SESSION_USER_ID_KEY;
 
 /**
- * 认证拦截器 验证用户登录状态，将用户信息存入 Request 属性
+ * 统一的Session认证拦截器
+ * <p>
+ * 根据构造函数参数 {@code required} 决定是否强制要求用户登录：
+ * <ul>
+ * <li>{@code required = true}：强制认证，未登录返回 401</li>
+ * <li>{@code required = false}：可选认证，尝试获取用户信息但不强制要求登录</li>
+ * </ul>
  */
-@Component
-public class AuthenticationInterceptor implements HandlerInterceptor {
+public class SessionAuthenticationInterceptor implements HandlerInterceptor {
 
-    public static final String REQUEST_USER_ID_KEY = "userId";
-    public static final String REQUEST_USERNAME_KEY = "username";
-
-    private static final String SESSION_USER_ID_KEY = "userId";
-    private static final String SESSION_USERNAME_KEY = "username";
-
+    private final boolean required;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * 创建认证拦截器
+     *
+     * @param required 是否强制要求认证（true=必须登录，false=可选登录）
+     */
+    public SessionAuthenticationInterceptor(boolean required) {
+        this.required = required;
+    }
 
     @Override
     public boolean preHandle(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
@@ -34,8 +46,15 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         // 1. 检查 Session
         HttpSession session = request.getSession(false);
         if (session == null || session.getAttribute(SESSION_USER_ID_KEY) == null) {
-            sendUnauthorizedResponse(response, "Not logged in");
-            return false;
+            // 未登录时的处理
+            if (required) {
+                // 强制认证：返回 401
+                sendUnauthorizedResponse(response, "Not logged in");
+                return false;
+            } else {
+                // 可选认证：放行请求（不设置用户信息）
+                return true;
+            }
         }
 
         // 2. 获取用户信息
@@ -43,8 +62,12 @@ public class AuthenticationInterceptor implements HandlerInterceptor {
         String username = (String) session.getAttribute(SESSION_USERNAME_KEY);
 
         if (userId == null) {
-            sendUnauthorizedResponse(response, "Invalid session");
-            return false;
+            if (required) {
+                sendUnauthorizedResponse(response, "Invalid session");
+                return false;
+            } else {
+                return true;
+            }
         }
 
         // 3. 存入 Request 属性，供 Controller 使用

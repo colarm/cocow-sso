@@ -19,12 +19,13 @@ import site.cocow.sso.application.auth.dto.LoginRequest;
 import site.cocow.sso.application.auth.dto.RegisterRequest;
 import site.cocow.sso.domain.user.User;
 import site.cocow.sso.domain.user.UserRepository;
+import site.cocow.sso.infrastructure.config.ApiConstants;
 
 /**
  * 认证控制器
  */
 @RestController
-@RequestMapping("/api/v1/auth")
+@RequestMapping(ApiConstants.AUTH_BASE)
 public class AuthController {
 
     private final AuthService authService;
