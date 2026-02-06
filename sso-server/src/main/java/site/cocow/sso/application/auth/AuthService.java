@@ -52,7 +52,7 @@ public class AuthService {
 
         user = userRepository.save(user);
 
-        return new AuthResult(user.getUsername());
+        return new AuthResult(user.getId(), user.getUsername(), user.getRole().name());
     }
 
     /**
@@ -77,7 +77,7 @@ public class AuthService {
             throw new InvalidCredentialsException("Invalid username or password");
         }
 
-        return new AuthResult(user.getUsername());
+        return new AuthResult(user.getId(), user.getUsername(), user.getRole().name());
     }
 
     /**

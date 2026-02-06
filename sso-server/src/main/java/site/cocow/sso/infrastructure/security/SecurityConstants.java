@@ -14,12 +14,14 @@ public class SecurityConstants {
      */
     public static final String REQUEST_USER_ID_KEY = "userId";
     public static final String REQUEST_USERNAME_KEY = "username";
+    public static final String REQUEST_USER_ROLE_KEY = "userRole";
 
     /**
      * Session 属性键
      */
     public static final String SESSION_USER_ID_KEY = "userId";
     public static final String SESSION_USERNAME_KEY = "username";
+    public static final String SESSION_USER_ROLE_KEY = "userRole";
 
     /**
      * 公开接口路径（无需认证） 添加新的公开接口时，只需在此数组中添加路径模式
@@ -33,7 +35,9 @@ public class SecurityConstants {
         // OAuth2 公开端点
         ApiConstants.OAUTH_BASE + "/token",
         ApiConstants.OAUTH_BASE + "/revoke",
-        ApiConstants.OAUTH_BASE + "/introspect",};
+        ApiConstants.OAUTH_BASE + "/introspect",
+        // 客户端管理 - 允许的 scopes 查询
+        ApiConstants.CLIENT_BASE + "/allowed-scopes",};
 
     /**
      * 需要认证的接口路径 添加新的受保护接口时，只需在此数组中添加路径模式
@@ -42,8 +46,13 @@ public class SecurityConstants {
     public static final String[] PROTECTED_ENDPOINTS = {
         // 用户相关接口
         ApiConstants.USER_BASE + "/**",
-        // OAuth2 客户端管理接口
-        ApiConstants.CLIENT_BASE + "/**",
+        // OAuth2 客户端管理接口（排除公开的 allowed-scopes）
+        ApiConstants.CLIENT_BASE, // POST /clients - 注册
+        ApiConstants.CLIENT_BASE + "/", // 列表
+        ApiConstants.CLIENT_BASE + "/*", // GET/PUT/DELETE /clients/{id}
+        ApiConstants.CLIENT_BASE + "/*/regenerate-secret", // POST /clients/{id}/regenerate-secret
+        ApiConstants.CLIENT_BASE + "/*/enable", // PATCH /clients/{id}/enable
+        ApiConstants.CLIENT_BASE + "/*/disable", // PATCH /clients/{id}/disable
         // OAuth2 需要用户登录的端点
         ApiConstants.OAUTH_BASE + "/authorize",
         ApiConstants.OAUTH_BASE + "/userinfo",};

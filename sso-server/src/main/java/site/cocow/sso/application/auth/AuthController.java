@@ -19,8 +19,6 @@ import site.cocow.sso.application.auth.dto.AuthResult;
 import site.cocow.sso.application.auth.dto.LoginRequest;
 import site.cocow.sso.application.auth.dto.RegisterRequest;
 import site.cocow.sso.application.user.UserService;
-import site.cocow.sso.domain.user.User;
-import site.cocow.sso.domain.user.UserRepository;
 import site.cocow.sso.infrastructure.config.ApiConstants;
 
 /**
@@ -31,11 +29,9 @@ import site.cocow.sso.infrastructure.config.ApiConstants;
 public class AuthController {
 
     private final AuthService authService;
-    private final UserRepository userRepository;
 
-    public AuthController(AuthService authService, UserRepository userRepository) {
+    public AuthController(AuthService authService) {
         this.authService = authService;
-        this.userRepository = userRepository;
     }
 
     /**
@@ -49,13 +45,12 @@ public class AuthController {
             HttpServletResponse response
     ) {
         AuthResult authResult = authService.register(request);
-        User user = userRepository.findByUsername(request.username())
-                .orElseThrow(() -> new UserService.UserNotFoundException("User not found"));
 
         // 创建 Session 并存储用户信息
         HttpSession session = httpRequest.getSession(true);
-        session.setAttribute("userId", user.getId());
-        session.setAttribute("username", user.getUsername());
+        session.setAttribute("userId", authResult.userId());
+        session.setAttribute("username", authResult.username());
+        session.setAttribute("userRole", authResult.role());
 
         // 根据 rememberMe 设置 Session 超时时间
         if (rememberMe) {
@@ -85,13 +80,12 @@ public class AuthController {
             HttpServletResponse response
     ) {
         AuthResult authResult = authService.login(request);
-        User user = userRepository.findByUsername(request.username())
-                .orElseThrow(() -> new UserService.UserNotFoundException("User not found"));
 
         // 创建 Session 并存储用户信息
         HttpSession session = httpRequest.getSession(true);
-        session.setAttribute("userId", user.getId());
-        session.setAttribute("username", user.getUsername());
+        session.setAttribute("userId", authResult.userId());
+        session.setAttribute("username", authResult.username());
+        session.setAttribute("userRole", authResult.role());
 
         // 根据 rememberMe 设置 Session 超时时间
         if (rememberMe) {

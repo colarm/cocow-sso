@@ -42,7 +42,9 @@ public class UserService {
         userInfo.put("email", user.getEmail());
         userInfo.put("enabled", user.getEnabled());
         userInfo.put("locked", user.getLocked());
+        userInfo.put("role", user.getRole());
         userInfo.put("createdAt", user.getCreatedAt());
+        userInfo.put("updatedAt", user.getUpdatedAt());
 
         return userInfo;
     }

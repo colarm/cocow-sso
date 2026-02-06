@@ -58,6 +58,9 @@ public class Client {
     @Column(name = "enabled", nullable = false)
     private Boolean enabled = true;
 
+    @Column(name = "owner_id")
+    private Long ownerId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -132,6 +135,14 @@ public class Client {
 
     public void setEnabled(Boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public Long getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(Long ownerId) {
+        this.ownerId = ownerId;
     }
 
     public LocalDateTime getCreatedAt() {

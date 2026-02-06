@@ -14,8 +14,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import static site.cocow.sso.infrastructure.security.SecurityConstants.REQUEST_USERNAME_KEY;
 import static site.cocow.sso.infrastructure.security.SecurityConstants.REQUEST_USER_ID_KEY;
+import static site.cocow.sso.infrastructure.security.SecurityConstants.REQUEST_USER_ROLE_KEY;
 import static site.cocow.sso.infrastructure.security.SecurityConstants.SESSION_USERNAME_KEY;
 import static site.cocow.sso.infrastructure.security.SecurityConstants.SESSION_USER_ID_KEY;
+import static site.cocow.sso.infrastructure.security.SecurityConstants.SESSION_USER_ROLE_KEY;
 
 /**
  * 统一的Session认证拦截器
@@ -60,6 +62,7 @@ public class SessionAuthenticationInterceptor implements HandlerInterceptor {
         // 2. 获取用户信息
         Long userId = (Long) session.getAttribute(SESSION_USER_ID_KEY);
         String username = (String) session.getAttribute(SESSION_USERNAME_KEY);
+        String userRole = (String) session.getAttribute(SESSION_USER_ROLE_KEY);
 
         if (userId == null) {
             if (required) {
@@ -73,6 +76,7 @@ public class SessionAuthenticationInterceptor implements HandlerInterceptor {
         // 3. 存入 Request 属性，供 Controller 使用
         request.setAttribute(REQUEST_USER_ID_KEY, userId);
         request.setAttribute(REQUEST_USERNAME_KEY, username);
+        request.setAttribute(REQUEST_USER_ROLE_KEY, userRole);
 
         return true;
     }

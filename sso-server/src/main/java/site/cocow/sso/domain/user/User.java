@@ -5,6 +5,8 @@ import java.util.Objects;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -38,6 +40,10 @@ public class User {
     @Column(nullable = false)
     private Boolean locked = false;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private UserRole role = UserRole.USER;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -47,13 +53,14 @@ public class User {
     public User() {
     }
 
-    public User(Long id, String username, String email, String passwordHash, Boolean enabled, Boolean locked, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public User(Long id, String username, String email, String passwordHash, Boolean enabled, Boolean locked, UserRole role, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.passwordHash = passwordHash;
         this.enabled = enabled;
         this.locked = locked;
+        this.role = role;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -104,6 +111,14 @@ public class User {
 
     public void setLocked(Boolean locked) {
         this.locked = locked;
+    }
+
+    public UserRole getRole() {
+        return role;
+    }
+
+    public void setRole(UserRole role) {
+        this.role = role;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -158,8 +173,27 @@ public class User {
                 + ", email='" + email + '\''
                 + ", enabled=" + enabled
                 + ", locked=" + locked
+                + ", role=" + role
                 + ", createdAt=" + createdAt
                 + ", updatedAt=" + updatedAt
                 + '}';
+    }
+
+    /**
+     * 用户角色枚举
+     */
+    public enum UserRole {
+        /**
+         * 普通用户 - 只能使用SSO登录
+         */
+        USER,
+        /**
+         * 客户端管理员 - 可以管理自己创建的OAuth2客户端
+         */
+        CLIENT_ADMIN,
+        /**
+         * 系统管理员 - 可以管理所有客户端和用户
+         */
+        ADMIN
     }
 }
