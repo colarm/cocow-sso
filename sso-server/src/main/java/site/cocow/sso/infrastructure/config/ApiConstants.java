@@ -28,7 +28,12 @@ public class ApiConstants {
     /**
      * OAuth2 端点
      */
-    public static final String OAUTH_BASE = "/oauth";
+    public static final String OAUTH_BASE = API_V1 + "/oauth";
+
+    /**
+     * OAuth2 客户端管理端点
+     */
+    public static final String CLIENT_BASE = API_V1 + "/client";
 
     private ApiConstants() {
         // 工具类，禁止实例化

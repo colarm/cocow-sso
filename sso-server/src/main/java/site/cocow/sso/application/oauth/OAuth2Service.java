@@ -5,6 +5,9 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -12,12 +15,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import de.mkammerer.argon2.Argon2;
 import de.mkammerer.argon2.Argon2Factory;
+import site.cocow.sso.application.user.UserService;
+import site.cocow.sso.domain.client.Client;
+import site.cocow.sso.domain.client.ClientRepository;
 import site.cocow.sso.domain.oauth.AuthorizationCode;
 import site.cocow.sso.domain.oauth.AuthorizationCodeRepository;
-import site.cocow.sso.domain.oauth.Client;
-import site.cocow.sso.domain.oauth.ClientRepository;
 import site.cocow.sso.domain.oauth.OAuthToken;
 import site.cocow.sso.domain.oauth.OAuthTokenRepository;
+import site.cocow.sso.infrastructure.exception.BusinessException;
 import site.cocow.sso.infrastructure.jwt.JwtTokenService;
 
 /**
@@ -31,6 +36,7 @@ public class OAuth2Service {
     private final AuthorizationCodeRepository authorizationCodeRepository;
     private final OAuthTokenRepository tokenRepository;
     private final JwtTokenService jwtTokenService;
+    private final UserService userService;
     private final SecureRandom secureRandom = new SecureRandom();
     private final Argon2 argon2 = Argon2Factory.create();
 
@@ -38,11 +44,13 @@ public class OAuth2Service {
             ClientRepository clientRepository,
             AuthorizationCodeRepository authorizationCodeRepository,
             OAuthTokenRepository tokenRepository,
-            JwtTokenService jwtTokenService) {
+            JwtTokenService jwtTokenService,
+            UserService userService) {
         this.clientRepository = clientRepository;
         this.authorizationCodeRepository = authorizationCodeRepository;
         this.tokenRepository = tokenRepository;
         this.jwtTokenService = jwtTokenService;
+        this.userService = userService;
     }
 
     /**
@@ -50,15 +58,15 @@ public class OAuth2Service {
      */
     public Client validateClient(String clientId, String clientSecret) {
         Client client = clientRepository.findByClientId(clientId)
-                .orElseThrow(() -> new RuntimeException("Invalid client_id"));
+                .orElseThrow(() -> new InvalidClientException("Invalid client_id"));
 
         if (!client.getEnabled()) {
-            throw new RuntimeException("Client is disabled");
+            throw new InvalidClientException("Client is disabled");
         }
 
         // 验证 clientSecret（使用 Argon2 哈希验证）
         if (!argon2.verify(client.getClientSecret(), clientSecret.toCharArray())) {
-            throw new RuntimeException("Invalid client_secret");
+            throw new InvalidClientException("Invalid client_secret");
         }
 
         return client;
@@ -69,7 +77,7 @@ public class OAuth2Service {
      */
     public void validateRedirectUri(Client client, String redirectUri) {
         if (!client.getRedirectUris().contains(redirectUri)) {
-            throw new RuntimeException("Invalid redirect_uri");
+            throw new InvalidRedirectUriException("Invalid redirect_uri");
         }
     }
 
@@ -110,39 +118,47 @@ public class OAuth2Service {
             String redirectUri,
             String codeVerifier) {
 
+        // 0. 验证参数
+        if (code == null || code.isBlank()) {
+            throw new InvalidAuthorizationCodeException("code is required");
+        }
+        if (redirectUri == null || redirectUri.isBlank()) {
+            throw new InvalidRedirectUriException("redirect_uri is required");
+        }
+
         // 1. 验证客户端凭证
         validateClient(clientId, clientSecret);
 
         // 2. 查找授权码
         AuthorizationCode authCode = authorizationCodeRepository.findByCode(code)
-                .orElseThrow(() -> new RuntimeException("Invalid authorization code"));
+                .orElseThrow(() -> new InvalidAuthorizationCodeException("Invalid authorization code"));
 
         // 3. 验证授权码是否过期
         if (authCode.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Authorization code has expired");
+            throw new InvalidAuthorizationCodeException("Authorization code has expired");
         }
 
         // 4. 验证授权码是否已使用
         if (authCode.getUsed()) {
-            throw new RuntimeException("Authorization code has already been used");
+            throw new InvalidAuthorizationCodeException("Authorization code has already been used");
         }
 
         // 5. 验证 clientId 和 redirectUri
         if (!authCode.getClientId().equals(clientId)) {
-            throw new RuntimeException("Client ID mismatch");
+            throw new InvalidClientException("Client ID mismatch");
         }
         if (!authCode.getRedirectUri().equals(redirectUri)) {
-            throw new RuntimeException("Redirect URI mismatch");
+            throw new InvalidRedirectUriException("Redirect URI mismatch");
         }
 
         // 6. 验证 PKCE（根据客户端类型强制或可选）
         Client client = clientRepository.findByClientId(clientId)
-                .orElseThrow(() -> new RuntimeException("Client not found"));
+                .orElseThrow(() -> new InvalidClientException("Client not found"));
 
         if (client.getClientType() == Client.ClientType.PUBLIC) {
             // 公开客户端必须使用 PKCE
             if (authCode.getCodeChallenge() == null) {
-                throw new RuntimeException("PKCE is required for public clients");
+                throw new PKCEValidationException("PKCE is required for public clients");
             }
             validatePKCE(authCode.getCodeChallenge(), authCode.getCodeChallengeMethod(), codeVerifier);
         } else {
@@ -164,26 +180,31 @@ public class OAuth2Service {
      * 使用 Refresh Token 刷新 Access Token
      */
     public OAuthToken refreshAccessToken(String refreshToken, String clientId, String clientSecret) {
+        // 0. 验证参数
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new InvalidTokenException("refresh_token is required");
+        }
+
         // 1. 验证客户端凭证
         validateClient(clientId, clientSecret);
 
         // 2. 查找 Refresh Token
         OAuthToken oldToken = tokenRepository.findByRefreshToken(refreshToken)
-                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
+                .orElseThrow(() -> new InvalidTokenException("Invalid refresh token"));
 
         // 3. 验证 Refresh Token 是否过期
         if (oldToken.getRefreshTokenExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Refresh token has expired");
+            throw new InvalidTokenException("Refresh token has expired");
         }
 
         // 4. 验证 Refresh Token 是否被撤销
         if (oldToken.getRevoked()) {
-            throw new RuntimeException("Refresh token has been revoked");
+            throw new InvalidTokenException("Refresh token has been revoked");
         }
 
         // 5. 验证 clientId
         if (!oldToken.getClientId().equals(clientId)) {
-            throw new RuntimeException("Client ID mismatch");
+            throw new InvalidClientException("Client ID mismatch");
         }
 
         // 6. 撤销旧 Token
@@ -234,6 +255,41 @@ public class OAuth2Service {
     }
 
     /**
+     * 从 Access Token 获取用户信息（OIDC UserInfo）
+     */
+    public Map<String, Object> getUserInfoFromAccessToken(String authorization) {
+        // 验证 Bearer token
+        if (authorization == null || authorization.isBlank()) {
+            throw new InvalidTokenException("Missing Authorization header");
+        }
+        if (!authorization.startsWith("Bearer ")) {
+            throw new InvalidTokenException("Invalid Authorization header format");
+        }
+
+        String accessToken = authorization.substring(7); // 去掉 "Bearer " 前缀
+        if (accessToken.isBlank()) {
+            throw new InvalidTokenException("Missing access token");
+        }
+
+        // 验证 token 并解析
+        Map<String, Object> claims = jwtTokenService.verifyAndParseToken(accessToken);
+        String subClaim = (String) claims.get("sub");
+        if (subClaim == null || subClaim.isBlank()) {
+            throw new InvalidTokenException("Token missing 'sub' claim");
+        }
+        Long userId = Long.valueOf(subClaim);
+        String scope = (String) claims.get("scope");
+
+        // 解析 scope
+        Set<String> scopes = scope != null && !scope.isBlank()
+                ? Set.of(scope.split(" "))
+                : Set.of();
+
+        // 根据 scope 返回用户信息
+        return userService.getUserInfoByClaims(Objects.requireNonNull(userId), Objects.requireNonNull(scopes));
+    }
+
+    /**
      * 生成 Token（包括 Access Token 和 Refresh Token）
      */
     private OAuthToken generateToken(Long userId, String clientId, String scope) {
@@ -262,7 +318,7 @@ public class OAuth2Service {
      */
     private void validatePKCE(String codeChallenge, String codeChallengeMethod, String codeVerifier) {
         if (codeVerifier == null) {
-            throw new RuntimeException("code_verifier is required for PKCE");
+            throw new PKCEValidationException("code_verifier is required for PKCE");
         }
 
         String computedChallenge = switch (codeChallengeMethod) {
@@ -271,11 +327,11 @@ public class OAuth2Service {
             case "plain" ->
                 codeVerifier;
             default ->
-                throw new RuntimeException("Unsupported code_challenge_method");
+                throw new PKCEValidationException("Unsupported code_challenge_method");
         };
 
         if (!codeChallenge.equals(computedChallenge)) {
-            throw new RuntimeException("code_verifier does not match code_challenge");
+            throw new PKCEValidationException("code_verifier does not match code_challenge");
         }
     }
 
@@ -303,7 +359,7 @@ public class OAuth2Service {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return digest.digest(input.getBytes());
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not found", e);
+            throw new IllegalStateException("SHA-256 algorithm not found", e);
         }
     }
 
@@ -325,5 +381,55 @@ public class OAuth2Service {
             LocalDateTime expiresAt
             ) {
 
+    }
+
+    /**
+     * 无效客户端异常
+     */
+    public static class InvalidClientException extends BusinessException {
+
+        public InvalidClientException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * 无效授权码异常
+     */
+    public static class InvalidAuthorizationCodeException extends BusinessException {
+
+        public InvalidAuthorizationCodeException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * 无效令牌异常
+     */
+    public static class InvalidTokenException extends BusinessException {
+
+        public InvalidTokenException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * 无效重定向URI异常
+     */
+    public static class InvalidRedirectUriException extends BusinessException {
+
+        public InvalidRedirectUriException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * PKCE验证异常
+     */
+    public static class PKCEValidationException extends BusinessException {
+
+        public PKCEValidationException(String message) {
+            super(message);
+        }
     }
 }

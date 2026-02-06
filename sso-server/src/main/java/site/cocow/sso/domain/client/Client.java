@@ -1,4 +1,4 @@
-package site.cocow.sso.domain.oauth;
+package site.cocow.sso.domain.client;
 
 import java.time.LocalDateTime;
 import java.util.Set;

@@ -42,6 +42,8 @@ public class SecurityConstants {
     public static final String[] PROTECTED_ENDPOINTS = {
         // 用户相关接口
         ApiConstants.USER_BASE + "/**",
+        // OAuth2 客户端管理接口
+        ApiConstants.CLIENT_BASE + "/**",
         // OAuth2 需要用户登录的端点
         ApiConstants.OAUTH_BASE + "/authorize",
         ApiConstants.OAUTH_BASE + "/userinfo",};

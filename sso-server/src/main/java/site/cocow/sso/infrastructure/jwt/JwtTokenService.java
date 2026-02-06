@@ -23,6 +23,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 
 import jakarta.annotation.PostConstruct;
+import site.cocow.sso.infrastructure.exception.BusinessException;
 
 /**
  * JWT Token 服务 使用 RS256 算法生成和验证 JWT
@@ -81,7 +82,7 @@ public class JwtTokenService {
             signedJWT.sign(signer);
             return signedJWT.serialize();
         } catch (JOSEException e) {
-            throw new RuntimeException("Failed to generate access token", e);
+            throw new TokenGenerationException("Failed to generate access token", e);
         }
     }
 
@@ -97,19 +98,19 @@ public class JwtTokenService {
 
             // 验证签名
             if (!signedJWT.verify(verifier)) {
-                throw new RuntimeException("Invalid token signature");
+                throw new InvalidTokenException("Invalid token signature");
             }
 
             JWTClaimsSet claimsSet = signedJWT.getJWTClaimsSet();
 
             // 验证过期时间
             if (claimsSet.getExpirationTime().before(new Date())) {
-                throw new RuntimeException("Token has expired");
+                throw new InvalidTokenException("Token has expired");
             }
 
             return claimsSet.getClaims();
         } catch (ParseException | JOSEException e) {
-            throw new RuntimeException("Invalid token: " + e.getMessage(), e);
+            throw new InvalidTokenException("Invalid token: " + e.getMessage(), e);
         }
     }
 
@@ -154,5 +155,29 @@ public class JwtTokenService {
      */
     public RSAPublicKey getPublicKey() {
         return publicKey;
+    }
+
+    /**
+     * Token生成异常
+     */
+    public static class TokenGenerationException extends BusinessException {
+
+        public TokenGenerationException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /**
+     * 无效Token异常
+     */
+    public static class InvalidTokenException extends BusinessException {
+
+        public InvalidTokenException(String message) {
+            super(message);
+        }
+
+        public InvalidTokenException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 }

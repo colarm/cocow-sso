@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,6 +18,7 @@ import jakarta.servlet.http.HttpSession;
 import site.cocow.sso.application.auth.dto.AuthResult;
 import site.cocow.sso.application.auth.dto.LoginRequest;
 import site.cocow.sso.application.auth.dto.RegisterRequest;
+import site.cocow.sso.application.user.UserService;
 import site.cocow.sso.domain.user.User;
 import site.cocow.sso.domain.user.UserRepository;
 import site.cocow.sso.infrastructure.config.ApiConstants;
@@ -46,36 +48,30 @@ public class AuthController {
             HttpServletRequest httpRequest,
             HttpServletResponse response
     ) {
-        try {
-            AuthResult authResult = authService.register(request);
-            User user = userRepository.findByUsername(request.getUsername())
-                    .orElseThrow(() -> new RuntimeException("User not found"));
+        AuthResult authResult = authService.register(request);
+        User user = userRepository.findByUsername(request.username())
+                .orElseThrow(() -> new UserService.UserNotFoundException("User not found"));
 
-            // 创建 Session 并存储用户信息
-            HttpSession session = httpRequest.getSession(true);
-            session.setAttribute("userId", user.getId());
-            session.setAttribute("username", user.getUsername());
+        // 创建 Session 并存储用户信息
+        HttpSession session = httpRequest.getSession(true);
+        session.setAttribute("userId", user.getId());
+        session.setAttribute("username", user.getUsername());
 
-            // 根据 rememberMe 设置 Session 超时时间
-            if (rememberMe) {
-                session.setMaxInactiveInterval(30 * 24 * 60 * 60); // 30天
-            } else {
-                session.setMaxInactiveInterval(30 * 60); // 30分钟
-            }
-
-            // 返回响应
-            Map<String, Object> result = new HashMap<>();
-            result.put("username", authResult.getUsername());
-            result.put("message", "Registration successful");
-            if (rememberMe) {
-                result.put("rememberMe", true);
-            }
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        // 根据 rememberMe 设置 Session 超时时间
+        if (rememberMe) {
+            session.setMaxInactiveInterval(30 * 24 * 60 * 60); // 30天
+        } else {
+            session.setMaxInactiveInterval(30 * 60); // 30分钟
         }
+
+        // 返回响应
+        Map<String, Object> result = new HashMap<>();
+        result.put("username", authResult.username());
+        result.put("message", "Registration successful");
+        if (rememberMe) {
+            result.put("rememberMe", true);
+        }
+        return ResponseEntity.ok(result);
     }
 
     /**
@@ -88,36 +84,30 @@ public class AuthController {
             HttpServletRequest httpRequest,
             HttpServletResponse response
     ) {
-        try {
-            AuthResult authResult = authService.login(request);
-            User user = userRepository.findByUsername(request.getUsername())
-                    .orElseThrow(() -> new RuntimeException("User not found"));
+        AuthResult authResult = authService.login(request);
+        User user = userRepository.findByUsername(request.username())
+                .orElseThrow(() -> new UserService.UserNotFoundException("User not found"));
 
-            // 创建 Session 并存储用户信息
-            HttpSession session = httpRequest.getSession(true);
-            session.setAttribute("userId", user.getId());
-            session.setAttribute("username", user.getUsername());
+        // 创建 Session 并存储用户信息
+        HttpSession session = httpRequest.getSession(true);
+        session.setAttribute("userId", user.getId());
+        session.setAttribute("username", user.getUsername());
 
-            // 根据 rememberMe 设置 Session 超时时间
-            if (rememberMe) {
-                session.setMaxInactiveInterval(30 * 24 * 60 * 60); // 30天
-            } else {
-                session.setMaxInactiveInterval(30 * 60); // 30分钟
-            }
-
-            // 返回响应
-            Map<String, Object> result = new HashMap<>();
-            result.put("username", authResult.getUsername());
-            result.put("message", "Login successful");
-            if (rememberMe) {
-                result.put("rememberMe", true);
-            }
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+        // 根据 rememberMe 设置 Session 超时时间
+        if (rememberMe) {
+            session.setMaxInactiveInterval(30 * 24 * 60 * 60); // 30天
+        } else {
+            session.setMaxInactiveInterval(30 * 60); // 30分钟
         }
+
+        // 返回响应
+        Map<String, Object> result = new HashMap<>();
+        result.put("username", authResult.username());
+        result.put("message", "Login successful");
+        if (rememberMe) {
+            result.put("rememberMe", true);
+        }
+        return ResponseEntity.ok(result);
     }
 
     /**
@@ -125,20 +115,68 @@ public class AuthController {
      */
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletRequest request, HttpServletResponse response) {
-        try {
-            // 销毁 Session
-            HttpSession session = request.getSession(false);
-            if (session != null) {
-                session.invalidate();
-            }
-
-            Map<String, String> result = new HashMap<>();
-            result.put("message", "Logout successful");
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        // 销毁 Session
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            session.invalidate();
         }
+
+        Map<String, String> result = new HashMap<>();
+        result.put("message", "Logout successful");
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 处理用户名已存在异常
+     */
+    @ExceptionHandler(AuthService.UsernameAlreadyExistsException.class)
+    public ResponseEntity<Map<String, String>> handleUsernameAlreadyExists(AuthService.UsernameAlreadyExistsException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    /**
+     * 处理邮箱已存在异常
+     */
+    @ExceptionHandler(AuthService.EmailAlreadyExistsException.class)
+    public ResponseEntity<Map<String, String>> handleEmailAlreadyExists(AuthService.EmailAlreadyExistsException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    /**
+     * 处理凭据无效异常
+     */
+    @ExceptionHandler(AuthService.InvalidCredentialsException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidCredentials(AuthService.InvalidCredentialsException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    /**
+     * 处理账户被锁定异常
+     */
+    @ExceptionHandler(AuthService.AccountLockedException.class)
+    public ResponseEntity<Map<String, String>> handleAccountLocked(AuthService.AccountLockedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    /**
+     * 处理账户被禁用异常
+     */
+    @ExceptionHandler(AuthService.AccountDisabledException.class)
+    public ResponseEntity<Map<String, String>> handleAccountDisabled(AuthService.AccountDisabledException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    /**
+     * 处理用户未找到异常
+     */
+    @ExceptionHandler(UserService.UserNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleUserNotFound(UserService.UserNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", ex.getMessage()));
     }
 }

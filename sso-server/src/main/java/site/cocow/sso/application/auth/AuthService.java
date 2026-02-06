@@ -31,20 +31,20 @@ public class AuthService {
      */
     public AuthResult register(RegisterRequest request) {
         // 检查用户名是否已存在
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw new BusinessException("Username already exists");
+        if (userRepository.existsByUsername(request.username())) {
+            throw new UsernameAlreadyExistsException("Username already exists");
         }
 
         // 检查邮箱是否已存在
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessException("Email already registered");
+        if (userRepository.existsByEmail(request.email())) {
+            throw new EmailAlreadyExistsException("Email already registered");
         }
 
         // 创建用户
         User user = new User();
-        user.setUsername(request.getUsername());
-        user.setEmail(request.getEmail());
-        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        user.setUsername(request.username());
+        user.setEmail(request.email());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setEnabled(true);
         user.setLocked(false);
         user.setCreatedAt(LocalDateTime.now());
@@ -60,23 +60,73 @@ public class AuthService {
      */
     public AuthResult login(LoginRequest request) {
         // 查找用户
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new BusinessException("Invalid username or password"));
+        User user = userRepository.findByUsername(request.username())
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid username or password"));
 
         // 检查账户状态
         if (user.getLocked()) {
-            throw new BusinessException("Account is locked");
+            throw new AccountLockedException("Account is locked");
         }
 
         if (!user.getEnabled()) {
-            throw new BusinessException("Account is disabled");
+            throw new AccountDisabledException("Account is disabled");
         }
 
         // 验证密码
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new BusinessException("Invalid username or password");
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            throw new InvalidCredentialsException("Invalid username or password");
         }
 
         return new AuthResult(user.getUsername());
+    }
+
+    /**
+     * 用户名已存在异常
+     */
+    public static class UsernameAlreadyExistsException extends BusinessException {
+
+        public UsernameAlreadyExistsException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * 邮箱已注册异常
+     */
+    public static class EmailAlreadyExistsException extends BusinessException {
+
+        public EmailAlreadyExistsException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * 无效凭据异常
+     */
+    public static class InvalidCredentialsException extends BusinessException {
+
+        public InvalidCredentialsException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * 账户被锁定异常
+     */
+    public static class AccountLockedException extends BusinessException {
+
+        public AccountLockedException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * 账户被禁用异常
+     */
+    public static class AccountDisabledException extends BusinessException {
+
+        public AccountDisabledException(String message) {
+            super(message);
+        }
     }
 }

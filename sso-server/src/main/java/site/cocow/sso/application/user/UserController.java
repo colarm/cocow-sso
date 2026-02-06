@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
+import site.cocow.sso.application.user.dto.ChangePasswordRequest;
+import site.cocow.sso.application.user.dto.DeleteAccountRequest;
+import site.cocow.sso.application.user.dto.UpdateUserRequest;
 import site.cocow.sso.infrastructure.config.ApiConstants;
 import static site.cocow.sso.infrastructure.security.SecurityConstants.REQUEST_USER_ID_KEY;
 
@@ -60,8 +63,8 @@ public class UserController {
 
         Map<String, Object> updatedUserInfo = userService.updateUserInfo(
                 userId,
-                updateRequest.username,
-                updateRequest.email
+                updateRequest.username(),
+                updateRequest.email()
         );
         return ResponseEntity.ok(updatedUserInfo);
     }
@@ -80,11 +83,11 @@ public class UserController {
         );
 
         String oldPassword = Objects.requireNonNull(
-                changePasswordRequest.oldPassword,
+                changePasswordRequest.oldPassword(),
                 "Old password is required"
         );
         String newPassword = Objects.requireNonNull(
-                changePasswordRequest.newPassword,
+                changePasswordRequest.newPassword(),
                 "New password is required"
         );
 
@@ -106,7 +109,7 @@ public class UserController {
         );
 
         String password = Objects.requireNonNull(
-                deleteRequest.password,
+                deleteRequest.password(),
                 "Password is required to delete account"
         );
 
@@ -161,18 +164,5 @@ public class UserController {
     public ResponseEntity<Map<String, String>> handleWeakPassword(UserService.WeakPasswordException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(Map.of("error", ex.getMessage()));
-    }
-
-    // Request DTOs
-    public record UpdateUserRequest(String username, String email) {
-
-    }
-
-    public record ChangePasswordRequest(String oldPassword, String newPassword) {
-
-    }
-
-    public record DeleteAccountRequest(String password) {
-
     }
 }

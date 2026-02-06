@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import site.cocow.sso.domain.user.User;
 import site.cocow.sso.domain.user.UserRepository;
+import site.cocow.sso.infrastructure.exception.BusinessException;
 import site.cocow.sso.infrastructure.security.PasswordEncoder;
 
 /**
@@ -160,7 +161,7 @@ public class UserService {
     /**
      * 用户未找到异常
      */
-    public static class UserNotFoundException extends RuntimeException {
+    public static class UserNotFoundException extends BusinessException {
 
         public UserNotFoundException(String message) {
             super(message);
@@ -170,7 +171,7 @@ public class UserService {
     /**
      * 邮箱已存在异常
      */
-    public static class EmailAlreadyExistsException extends RuntimeException {
+    public static class EmailAlreadyExistsException extends BusinessException {
 
         public EmailAlreadyExistsException(String message) {
             super(message);
@@ -180,7 +181,7 @@ public class UserService {
     /**
      * 用户名已存在异常
      */
-    public static class UsernameAlreadyExistsException extends RuntimeException {
+    public static class UsernameAlreadyExistsException extends BusinessException {
 
         public UsernameAlreadyExistsException(String message) {
             super(message);
@@ -190,7 +191,7 @@ public class UserService {
     /**
      * 密码错误异常
      */
-    public static class InvalidPasswordException extends RuntimeException {
+    public static class InvalidPasswordException extends BusinessException {
 
         public InvalidPasswordException(String message) {
             super(message);
@@ -200,7 +201,7 @@ public class UserService {
     /**
      * 弱密码异常
      */
-    public static class WeakPasswordException extends RuntimeException {
+    public static class WeakPasswordException extends BusinessException {
 
         public WeakPasswordException(String message) {
             super(message);

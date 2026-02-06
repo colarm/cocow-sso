@@ -1,8 +1,6 @@
 package site.cocow.sso.application.oauth;
 
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,7 +13,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import site.cocow.sso.application.user.UserService;
+import site.cocow.sso.application.oauth.dto.IntrospectionResponse;
+import site.cocow.sso.application.oauth.dto.TokenResponse;
 import site.cocow.sso.domain.oauth.OAuthToken;
 import site.cocow.sso.infrastructure.config.ApiConstants;
 import site.cocow.sso.infrastructure.jwt.JwtTokenService;
@@ -28,52 +27,39 @@ import site.cocow.sso.infrastructure.jwt.JwtTokenService;
 public class OAuth2Controller {
 
     private final OAuth2Service oauth2Service;
-    private final JwtTokenService jwtTokenService;
-    private final UserService userService;
 
-    public OAuth2Controller(
-            OAuth2Service oauth2Service,
-            JwtTokenService jwtTokenService,
-            UserService userService
-    ) {
+    public OAuth2Controller(OAuth2Service oauth2Service, JwtTokenService jwtTokenService) {
         this.oauth2Service = oauth2Service;
-        this.jwtTokenService = jwtTokenService;
-        this.userService = userService;
     }
 
     /**
      * Token 端点 - 授权码换取 Token POST /oauth/token
      */
     @PostMapping("/token")
-    public ResponseEntity<Map<String, Object>> token(
+    public ResponseEntity<TokenResponse> token(
             @RequestParam("grant_type") @NonNull String grantType,
             @RequestParam(value = "code", required = false) String code,
             @RequestParam(value = "redirect_uri", required = false) String redirectUri,
-            @RequestParam(value = "client_id", required = false) @NonNull String clientId,
-            @RequestParam(value = "client_secret", required = false) @NonNull String clientSecret,
+            @RequestParam(value = "client_id") @NonNull String clientId,
+            @RequestParam(value = "client_secret") @NonNull String clientSecret,
             @RequestParam(value = "code_verifier", required = false) String codeVerifier,
             @RequestParam(value = "refresh_token", required = false) String refreshToken
     ) {
-
-        return switch (grantType) {
-            case "authorization_code" -> {
-                if (code == null || redirectUri == null) {
-                    throw new IllegalArgumentException("code and redirect_uri are required for authorization_code grant");
-                }
-                OAuthToken token = oauth2Service.exchangeCodeForToken(
-                        code, clientId, clientSecret, redirectUri, codeVerifier);
-                yield ResponseEntity.ok(buildTokenResponse(token));
-            }
-            case "refresh_token" -> {
-                if (refreshToken == null) {
-                    throw new IllegalArgumentException("refresh_token is required for refresh_token grant");
-                }
-                OAuthToken token = oauth2Service.refreshAccessToken(refreshToken, clientId, clientSecret);
-                yield ResponseEntity.ok(buildTokenResponse(token));
-            }
+        OAuthToken token = switch (grantType) {
+            case "authorization_code" ->
+                oauth2Service.exchangeCodeForToken(code, clientId, clientSecret, redirectUri, codeVerifier);
+            case "refresh_token" ->
+                oauth2Service.refreshAccessToken(refreshToken, clientId, clientSecret);
             default ->
                 throw new IllegalArgumentException("Unsupported grant_type: " + grantType);
         };
+
+        TokenResponse response = new TokenResponse(
+                token.getAccessToken(),
+                token.getRefreshToken(),
+                token.getScope() != null ? token.getScope() : ""
+        );
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -89,16 +75,14 @@ public class OAuth2Controller {
      * Token 自省端点 POST /oauth/introspect
      */
     @PostMapping("/introspect")
-    public ResponseEntity<Map<String, Object>> introspect(@RequestParam("token") @NonNull String token) {
+    public ResponseEntity<IntrospectionResponse> introspect(@RequestParam("token") @NonNull String token) {
         OAuth2Service.TokenIntrospectionResult result = oauth2Service.introspectToken(token);
 
-        return ResponseEntity.ok(Map.of(
-                "active", result.active(),
-                "client_id", result.clientId() != null ? result.clientId() : "",
-                "sub", result.userId() != null ? result.userId() : "",
-                "scope", result.scope() != null ? result.scope() : "",
-                "exp", result.expiresAt() != null ? result.expiresAt().toString() : ""
-        ));
+        IntrospectionResponse response = result.active()
+                ? IntrospectionResponse.active(result.clientId(), result.userId(), result.scope(), result.expiresAt())
+                : IntrospectionResponse.inactive();
+
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -107,54 +91,72 @@ public class OAuth2Controller {
      */
     @GetMapping("/userinfo")
     public ResponseEntity<Map<String, Object>> userinfo(
-            @RequestHeader("Authorization") String authorization
+            @RequestHeader(value = "Authorization", required = false) String authorization
     ) {
-        // 验证 Bearer token
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            throw new IllegalArgumentException("Invalid or missing Authorization header");
-        }
-
-        String accessToken = authorization.substring(7); // 去掉 "Bearer " 前缀
-
-        // 验证 token 并解析
-        Map<String, Object> claims = jwtTokenService.verifyAndParseToken(accessToken);
-        String subClaim = (String) claims.get("sub");
-        if (subClaim == null) {
-            throw new IllegalArgumentException("Token missing 'sub' claim");
-        }
-        Long userId = Objects.requireNonNull(Long.valueOf(subClaim));
-        String scope = (String) claims.get("scope");
-
-        // 解析 scope
-        Set<String> scopes = Objects.requireNonNull(
-                scope != null ? Set.of(scope.split(" ")) : Set.of()
-        );
-
-        // 根据 scope 返回用户信息
-        Map<String, Object> userInfo = userService.getUserInfoByClaims(userId, scopes);
-
+        Map<String, Object> userInfo = oauth2Service.getUserInfoFromAccessToken(authorization);
         return ResponseEntity.ok(userInfo);
     }
 
     /**
-     * 构建 Token 响应
+     * 处理无效客户端异常
      */
-    private Map<String, Object> buildTokenResponse(OAuthToken token) {
-        return Map.of(
-                "access_token", token.getAccessToken(),
-                "token_type", token.getTokenType(),
-                "expires_in", 3600, // 1 小时
-                "refresh_token", token.getRefreshToken(),
-                "scope", token.getScope() != null ? token.getScope() : ""
-        );
+    @ExceptionHandler(OAuth2Service.InvalidClientException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidClient(OAuth2Service.InvalidClientException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "invalid_client", "error_description", ex.getMessage()));
     }
 
     /**
-     * 统一异常处理
+     * 处理无效授权码异常
      */
-    @ExceptionHandler({RuntimeException.class, IllegalArgumentException.class})
-    public ResponseEntity<Map<String, String>> handleOAuthException(Exception ex) {
+    @ExceptionHandler(OAuth2Service.InvalidAuthorizationCodeException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidAuthorizationCode(OAuth2Service.InvalidAuthorizationCodeException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("error", "invalid_grant", "error_description", ex.getMessage()));
+    }
+
+    /**
+     * 处理无效令牌异常
+     */
+    @ExceptionHandler(OAuth2Service.InvalidTokenException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidToken(OAuth2Service.InvalidTokenException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "invalid_token", "error_description", ex.getMessage()));
+    }
+
+    /**
+     * 处理无效重定向URI异常
+     */
+    @ExceptionHandler(OAuth2Service.InvalidRedirectUriException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidRedirectUri(OAuth2Service.InvalidRedirectUriException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", "invalid_request", "error_description", ex.getMessage()));
+    }
+
+    /**
+     * 处理PKCE验证异常
+     */
+    @ExceptionHandler(OAuth2Service.PKCEValidationException.class)
+    public ResponseEntity<Map<String, String>> handlePKCEValidation(OAuth2Service.PKCEValidationException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", "invalid_grant", "error_description", ex.getMessage()));
+    }
+
+    /**
+     * 处理JWT令牌异常
+     */
+    @ExceptionHandler(JwtTokenService.InvalidTokenException.class)
+    public ResponseEntity<Map<String, String>> handleJwtInvalidToken(JwtTokenService.InvalidTokenException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "invalid_token", "error_description", ex.getMessage()));
+    }
+
+    /**
+     * 处理非法参数异常
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", "invalid_request", "error_description", ex.getMessage()));
     }
 }
