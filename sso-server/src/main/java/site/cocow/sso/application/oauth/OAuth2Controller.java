@@ -1,7 +1,10 @@
 package site.cocow.sso.application.oauth;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.NonNull;
@@ -12,9 +15,15 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.view.RedirectView;
 
+import jakarta.servlet.http.HttpSession;
 import site.cocow.sso.application.oauth.dto.IntrospectionResponse;
+import site.cocow.sso.application.oauth.dto.JwksResponse;
+import site.cocow.sso.application.oauth.dto.OidcDiscoveryResponse;
 import site.cocow.sso.application.oauth.dto.TokenResponse;
+import site.cocow.sso.domain.client.Client;
+import site.cocow.sso.domain.oauth.AuthorizationCode;
 import site.cocow.sso.domain.oauth.OAuthToken;
 import site.cocow.sso.infrastructure.config.ApiConstants;
 import site.cocow.sso.infrastructure.jwt.JwtTokenService;
@@ -27,9 +36,76 @@ import site.cocow.sso.infrastructure.jwt.JwtTokenService;
 public class OAuth2Controller {
 
     private final OAuth2Service oauth2Service;
+    private final JwtTokenService jwtTokenService;
+
+    @Value("${jwt.issuer:http://localhost:8848}")
+    private String issuer;
+
+    @Value("${server.port:8848}")
+    private String serverPort;
 
     public OAuth2Controller(OAuth2Service oauth2Service, JwtTokenService jwtTokenService) {
         this.oauth2Service = oauth2Service;
+        this.jwtTokenService = jwtTokenService;
+    }
+
+    /**
+     * 授权端点 - OAuth2 授权码流程的起点 GET /oauth/authorize
+     */
+    @GetMapping("/authorize")
+    public RedirectView authorize(
+            @RequestParam("response_type") @NonNull String responseType,
+            @RequestParam("client_id") @NonNull String clientId,
+            @RequestParam("redirect_uri") @NonNull String redirectUri,
+            @RequestParam(value = "scope", required = false, defaultValue = "openid profile email") String scope,
+            @RequestParam(value = "state", required = false) String state,
+            @RequestParam(value = "code_challenge", required = false) String codeChallenge,
+            @RequestParam(value = "code_challenge_method", required = false, defaultValue = "S256") String codeChallengeMethod,
+            HttpSession session
+    ) {
+        // 1. 验证 response_type
+        if (!"code".equals(responseType)) {
+            return new RedirectView(redirectUri + "?error=unsupported_response_type&state=" + (state != null ? state : ""));
+        }
+
+        // 2. 检查用户是否已登录
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) {
+            // 未登录，重定向到登录页面，携带原始授权请求参数
+            String loginRedirect = String.format("/login?redirect=/oauth/authorize?response_type=%s&client_id=%s&redirect_uri=%s&scope=%s&state=%s&code_challenge=%s&code_challenge_method=%s",
+                    responseType, clientId, redirectUri, scope, state != null ? state : "",
+                    codeChallenge != null ? codeChallenge : "", codeChallengeMethod);
+            return new RedirectView(Objects.requireNonNull(loginRedirect));
+        }
+
+        try {
+            // 3. 验证客户端（仅验证 client_id，不验证 secret）
+            Client client = oauth2Service.validateClientById(clientId);
+
+            // 4. 验证 redirect_uri
+            oauth2Service.validateRedirectUri(client, redirectUri);
+
+            // 5. 生成授权码
+            AuthorizationCode authCode = oauth2Service.generateAuthorizationCode(
+                    clientId, userId, redirectUri, scope, state, codeChallenge, codeChallengeMethod
+            );
+
+            // 6. 重定向回客户端，携带授权码
+            String redirectUrl = redirectUri + "?code=" + authCode.getCode();
+            if (state != null && !state.isBlank()) {
+                redirectUrl += "&state=" + state;
+            }
+
+            return new RedirectView(redirectUrl);
+
+        } catch (OAuth2Service.InvalidClientException e) {
+            return new RedirectView(redirectUri + "?error=invalid_client&error_description=" + e.getMessage() + "&state=" + (state != null ? state : ""));
+        } catch (OAuth2Service.InvalidRedirectUriException e) {
+            // redirect_uri 无效时不能重定向到该 URI，返回错误页面
+            throw e;
+        } catch (Exception e) {
+            return new RedirectView(redirectUri + "?error=server_error&error_description=" + e.getMessage() + "&state=" + (state != null ? state : ""));
+        }
     }
 
     /**
@@ -98,12 +174,46 @@ public class OAuth2Controller {
     }
 
     /**
+     * OIDC 发现端点 GET /.well-known/openid-configuration 返回 OIDC 提供者的元数据信息
+     */
+    @GetMapping("/.well-known/openid-configuration")
+    public ResponseEntity<OidcDiscoveryResponse> oidcDiscovery() {
+        String baseUrl = issuer.startsWith("http") ? issuer : "http://localhost:" + serverPort;
+
+        OidcDiscoveryResponse response = new OidcDiscoveryResponse(
+                baseUrl,
+                baseUrl + ApiConstants.OAUTH_BASE + "/authorize",
+                baseUrl + ApiConstants.OAUTH_BASE + "/token",
+                baseUrl + ApiConstants.OAUTH_BASE + "/userinfo",
+                baseUrl + ApiConstants.OAUTH_BASE + "/.well-known/jwks.json",
+                List.of("code", "id_token", "token id_token"),
+                List.of("public"),
+                List.of("RS256"),
+                List.of("openid", "profile", "email"),
+                List.of("authorization_code", "refresh_token"),
+                List.of("S256", "plain")
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * JWKS 端点 GET /.well-known/jwks.json 返回用于验证 JWT 签名的公钥集
+     */
+    @GetMapping("/.well-known/jwks.json")
+    public ResponseEntity<JwksResponse> jwks() {
+        Map<String, Object> jwk = jwtTokenService.getJwksKey();
+        JwksResponse response = new JwksResponse(List.of(jwk));
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * 处理无效客户端异常
      */
     @ExceptionHandler(OAuth2Service.InvalidClientException.class)
     public ResponseEntity<Map<String, String>> handleInvalidClient(OAuth2Service.InvalidClientException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("error", "invalid_client", "error_description", ex.getMessage()));
+                .body(Map.of("error", "invalid_client", "error_description", ex.getMessage(), "code", ex.getCode()));
     }
 
     /**
@@ -112,7 +222,7 @@ public class OAuth2Controller {
     @ExceptionHandler(OAuth2Service.InvalidAuthorizationCodeException.class)
     public ResponseEntity<Map<String, String>> handleInvalidAuthorizationCode(OAuth2Service.InvalidAuthorizationCodeException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(Map.of("error", "invalid_grant", "error_description", ex.getMessage()));
+                .body(Map.of("error", "invalid_grant", "error_description", ex.getMessage(), "code", ex.getCode()));
     }
 
     /**
@@ -121,7 +231,7 @@ public class OAuth2Controller {
     @ExceptionHandler(OAuth2Service.InvalidTokenException.class)
     public ResponseEntity<Map<String, String>> handleInvalidToken(OAuth2Service.InvalidTokenException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("error", "invalid_token", "error_description", ex.getMessage()));
+                .body(Map.of("error", "invalid_token", "error_description", ex.getMessage(), "code", ex.getCode()));
     }
 
     /**
@@ -130,7 +240,7 @@ public class OAuth2Controller {
     @ExceptionHandler(OAuth2Service.InvalidRedirectUriException.class)
     public ResponseEntity<Map<String, String>> handleInvalidRedirectUri(OAuth2Service.InvalidRedirectUriException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(Map.of("error", "invalid_request", "error_description", ex.getMessage()));
+                .body(Map.of("error", "invalid_request", "error_description", ex.getMessage(), "code", ex.getCode()));
     }
 
     /**
@@ -139,7 +249,7 @@ public class OAuth2Controller {
     @ExceptionHandler(OAuth2Service.PKCEValidationException.class)
     public ResponseEntity<Map<String, String>> handlePKCEValidation(OAuth2Service.PKCEValidationException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(Map.of("error", "invalid_grant", "error_description", ex.getMessage()));
+                .body(Map.of("error", "invalid_grant", "error_description", ex.getMessage(), "code", ex.getCode()));
     }
 
     /**
@@ -148,7 +258,7 @@ public class OAuth2Controller {
     @ExceptionHandler(JwtTokenService.InvalidTokenException.class)
     public ResponseEntity<Map<String, String>> handleJwtInvalidToken(JwtTokenService.InvalidTokenException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("error", "invalid_token", "error_description", ex.getMessage()));
+                .body(Map.of("error", "invalid_token", "error_description", ex.getMessage(), "code", ex.getCode()));
     }
 
     /**

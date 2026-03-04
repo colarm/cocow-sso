@@ -22,6 +22,8 @@ buildNumber.properties
 
 # 环境变量与密钥
 .env
+.env.*
+keys/
 *.pem
 *.key
 *.p12
@@ -36,3 +38,4 @@ logs/
 # 临时文件
 *.tmp
 *.bak
+.env.jwt

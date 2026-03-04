@@ -268,7 +268,7 @@ public class ClientService {
     public static class ClientNotFoundException extends BusinessException {
 
         public ClientNotFoundException(String message) {
-            super(message);
+            super("client.not_found", message);
         }
     }
 
@@ -278,7 +278,7 @@ public class ClientService {
     public static class ClientAlreadyExistsException extends BusinessException {
 
         public ClientAlreadyExistsException(String message) {
-            super(message);
+            super("client.already_exists", message);
         }
     }
 
@@ -288,7 +288,7 @@ public class ClientService {
     public static class InvalidScopeException extends BusinessException {
 
         public InvalidScopeException(String message) {
-            super(message);
+            super("client.invalid_scope", message);
         }
     }
 }

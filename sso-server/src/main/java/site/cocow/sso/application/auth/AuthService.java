@@ -86,7 +86,7 @@ public class AuthService {
     public static class UsernameAlreadyExistsException extends BusinessException {
 
         public UsernameAlreadyExistsException(String message) {
-            super(message);
+            super("auth.username_exists", message);
         }
     }
 
@@ -96,7 +96,7 @@ public class AuthService {
     public static class EmailAlreadyExistsException extends BusinessException {
 
         public EmailAlreadyExistsException(String message) {
-            super(message);
+            super("auth.email_exists", message);
         }
     }
 
@@ -106,7 +106,7 @@ public class AuthService {
     public static class InvalidCredentialsException extends BusinessException {
 
         public InvalidCredentialsException(String message) {
-            super(message);
+            super("auth.invalid_credentials", message);
         }
     }
 
@@ -116,7 +116,7 @@ public class AuthService {
     public static class AccountLockedException extends BusinessException {
 
         public AccountLockedException(String message) {
-            super(message);
+            super("auth.account_locked", message);
         }
     }
 
@@ -126,7 +126,7 @@ public class AuthService {
     public static class AccountDisabledException extends BusinessException {
 
         public AccountDisabledException(String message) {
-            super(message);
+            super("auth.account_disabled", message);
         }
     }
 }

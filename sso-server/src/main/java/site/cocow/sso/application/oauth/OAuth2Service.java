@@ -73,6 +73,20 @@ public class OAuth2Service {
     }
 
     /**
+     * 验证客户端（仅验证 client_id，用于授权端点）
+     */
+    public Client validateClientById(String clientId) {
+        Client client = clientRepository.findByClientId(clientId)
+                .orElseThrow(() -> new InvalidClientException("Invalid client_id"));
+
+        if (!client.getEnabled()) {
+            throw new InvalidClientException("Client is disabled");
+        }
+
+        return client;
+    }
+
+    /**
      * 验证 Redirect URI
      */
     public void validateRedirectUri(Client client, String redirectUri) {
@@ -389,7 +403,7 @@ public class OAuth2Service {
     public static class InvalidClientException extends BusinessException {
 
         public InvalidClientException(String message) {
-            super(message);
+            super("oauth2.invalid_client", message);
         }
     }
 
@@ -399,7 +413,7 @@ public class OAuth2Service {
     public static class InvalidAuthorizationCodeException extends BusinessException {
 
         public InvalidAuthorizationCodeException(String message) {
-            super(message);
+            super("oauth2.invalid_authorization_code", message);
         }
     }
 
@@ -409,7 +423,7 @@ public class OAuth2Service {
     public static class InvalidTokenException extends BusinessException {
 
         public InvalidTokenException(String message) {
-            super(message);
+            super("oauth2.invalid_token", message);
         }
     }
 
@@ -419,7 +433,7 @@ public class OAuth2Service {
     public static class InvalidRedirectUriException extends BusinessException {
 
         public InvalidRedirectUriException(String message) {
-            super(message);
+            super("oauth2.invalid_redirect_uri", message);
         }
     }
 
@@ -429,7 +443,7 @@ public class OAuth2Service {
     public static class PKCEValidationException extends BusinessException {
 
         public PKCEValidationException(String message) {
-            super(message);
+            super("oauth2.pkce_validation", message);
         }
     }
 }

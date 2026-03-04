@@ -29,6 +29,10 @@ spring:
     baseline-on-migrate: true
     locations: classpath:db/migration
 
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+
   data:
     redis:
       host: localhost
@@ -62,13 +66,14 @@ server:
 
 # JWT 配置
 jwt:
-  # Ed25519 私钥路径（环境变量注入）
+  # RSA 密钥（环境变量注入，PEM 格式）
   private-key: ${JWT_PRIVATE_KEY:}
   public-key: ${JWT_PUBLIC_KEY:}
+  # 密钥 ID，用于 JWKS 和 JWT header
+  kid: ${JWT_KID:rsa-key-1}
   access-token-validity: 900 # 15 分钟（秒）
   refresh-token-validity: 604800 # 7 天（秒）
-  issuer: https://sso.cocow.site
-  kid: ed25519-2026-01
+  issuer: ${JWT_ISSUER:https://sso.cocow.site}
 
 # Argon2 密码哈希配置
 argon2:

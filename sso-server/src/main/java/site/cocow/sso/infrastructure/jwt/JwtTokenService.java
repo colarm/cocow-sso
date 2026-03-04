@@ -1,15 +1,24 @@
 package site.cocow.sso.infrastructure.jwt;
 
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.text.ParseException;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.nimbusds.jose.JOSEException;
@@ -31,21 +40,98 @@ import site.cocow.sso.infrastructure.exception.BusinessException;
 @Service
 public class JwtTokenService {
 
+    private static final Logger log = LoggerFactory.getLogger(JwtTokenService.class);
+
+    @Value("${jwt.private-key:}")
+    private String privateKeyPem;
+
+    @Value("${jwt.public-key:}")
+    private String publicKeyPem;
+
+    @Value("${jwt.kid:rsa-key-1}")
+    private String keyId;
+
+    @Value("${jwt.issuer:http://localhost:8848}")
+    private String issuer;
+
+    @Value("${spring.profiles.active:local}")
+    private String activeProfile;
+
     private RSAPrivateKey privateKey;
     private RSAPublicKey publicKey;
     private JWSSigner signer;
     private JWSVerifier verifier;
 
     @PostConstruct
-    public void init() throws Exception {
-        // 生成 RSA 密钥对（生产环境应从配置文件或密钥管理系统加载）
+    public void init() throws NoSuchAlgorithmException, InvalidKeySpecException {
+        // 检查是否配置了密钥
+        boolean keysConfigured = privateKeyPem != null && !privateKeyPem.isBlank()
+                && publicKeyPem != null && !publicKeyPem.isBlank();
+
+        if (!keysConfigured) {
+            // 开发环境自动生成临时密钥
+            if ("local".equals(activeProfile) || "dev".equals(activeProfile)) {
+                log.warn("⚠️  JWT keys not configured. Generating temporary keys for development.");
+                log.warn("⚠️  For production, please set JWT_PRIVATE_KEY and JWT_PUBLIC_KEY environment variables.");
+                log.warn("⚠️  Run './scripts/generate-rsa-keys.sh' to generate keys.");
+                generateTemporaryKeys();
+            } else {
+                // 生产环境必须配置密钥
+                throw new IllegalStateException(
+                        "JWT keys not configured. Please set JWT_PRIVATE_KEY and JWT_PUBLIC_KEY environment variables. "
+                        + "Run './scripts/generate-rsa-keys.sh' to generate keys.");
+            }
+        } else {
+            // 从环境变量加载密钥
+            loadKeysFromConfig();
+        }
+
+        this.signer = new RSASSASigner(privateKey);
+        this.verifier = new RSASSAVerifier(publicKey);
+
+        log.info("✅ JWT Token Service initialized successfully (kid: {})", keyId);
+    }
+
+    /**
+     * 从配置加载密钥
+     */
+    private void loadKeysFromConfig() throws NoSuchAlgorithmException, InvalidKeySpecException {
+        try {
+            // 从 PEM 格式加载私钥
+            String privateKeyContent = privateKeyPem
+                    .replace("-----BEGIN PRIVATE KEY-----", "")
+                    .replace("-----END PRIVATE KEY-----", "")
+                    .replaceAll("\\s", "");
+            byte[] privateKeyBytes = Base64.getDecoder().decode(privateKeyContent);
+            PKCS8EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(privateKeyBytes);
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            this.privateKey = (RSAPrivateKey) keyFactory.generatePrivate(privateKeySpec);
+
+            // 从 PEM 格式加载公钥
+            String publicKeyContent = publicKeyPem
+                    .replace("-----BEGIN PUBLIC KEY-----", "")
+                    .replace("-----END PUBLIC KEY-----", "")
+                    .replaceAll("\\s", "");
+            byte[] publicKeyBytes = Base64.getDecoder().decode(publicKeyContent);
+            X509EncodedKeySpec publicKeySpec = new X509EncodedKeySpec(publicKeyBytes);
+            this.publicKey = (RSAPublicKey) keyFactory.generatePublic(publicKeySpec);
+
+            log.info("✅ JWT keys loaded from environment variables");
+        } catch (IllegalArgumentException | NoSuchAlgorithmException | InvalidKeySpecException e) {
+            throw new IllegalStateException("Failed to load JWT keys from configuration. Please check the key format.", e);
+        }
+    }
+
+    /**
+     * 生成临时密钥（仅用于开发环境）
+     */
+    private void generateTemporaryKeys() throws NoSuchAlgorithmException {
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
         keyPairGenerator.initialize(2048);
         KeyPair keyPair = keyPairGenerator.generateKeyPair();
 
         this.privateKey = (RSAPrivateKey) keyPair.getPrivate();
         this.publicKey = (RSAPublicKey) keyPair.getPublic();
-        this.signer = new RSASSASigner(privateKey);
         this.verifier = new RSASSAVerifier(publicKey);
     }
 
@@ -66,7 +152,7 @@ public class JwtTokenService {
             JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
                     .jwtID(UUID.randomUUID().toString())
                     .subject(String.valueOf(userId))
-                    .issuer("http://localhost:8848") // TODO: 从配置读取
+                    .issuer(issuer)
                     .audience(clientId)
                     .issueTime(Date.from(now))
                     .expirationTime(Date.from(expiration))
@@ -75,7 +161,7 @@ public class JwtTokenService {
                     .build();
 
             SignedJWT signedJWT = new SignedJWT(
-                    new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(UUID.randomUUID().toString()).build(),
+                    new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(keyId).build(),
                     claimsSet
             );
 
@@ -121,7 +207,7 @@ public class JwtTokenService {
         try {
             verifyAndParseToken(token);
             return true;
-        } catch (Exception e) {
+        } catch (InvalidTokenException e) {
             return false;
         }
     }
@@ -158,12 +244,26 @@ public class JwtTokenService {
     }
 
     /**
+     * 获取 JWKS (JSON Web Key Set) 格式的公钥
+     */
+    public Map<String, Object> getJwksKey() {
+        return Map.of(
+                "kty", "RSA",
+                "use", "sig",
+                "kid", keyId,
+                "alg", "RS256",
+                "n", java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(publicKey.getModulus().toByteArray()),
+                "e", java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(publicKey.getPublicExponent().toByteArray())
+        );
+    }
+
+    /**
      * Token生成异常
      */
     public static class TokenGenerationException extends BusinessException {
 
         public TokenGenerationException(String message, Throwable cause) {
-            super(message, cause);
+            super("jwt.token_generation", message, cause);
         }
     }
 
@@ -173,11 +273,11 @@ public class JwtTokenService {
     public static class InvalidTokenException extends BusinessException {
 
         public InvalidTokenException(String message) {
-            super(message);
+            super("jwt.invalid_token", message);
         }
 
         public InvalidTokenException(String message, Throwable cause) {
-            super(message, cause);
+            super("jwt.invalid_token", message, cause);
         }
     }
 }

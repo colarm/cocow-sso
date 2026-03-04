@@ -127,7 +127,7 @@ public class UserController {
     @ExceptionHandler(UserService.UserNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleUserNotFound(UserService.UserNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
     }
 
     /**
@@ -136,7 +136,7 @@ public class UserController {
     @ExceptionHandler(UserService.EmailAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleEmailAlreadyExists(UserService.EmailAlreadyExistsException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
     }
 
     /**
@@ -145,7 +145,7 @@ public class UserController {
     @ExceptionHandler(UserService.UsernameAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleUsernameAlreadyExists(UserService.UsernameAlreadyExistsException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
     }
 
     /**
@@ -154,7 +154,7 @@ public class UserController {
     @ExceptionHandler(UserService.InvalidPasswordException.class)
     public ResponseEntity<Map<String, String>> handleInvalidPassword(UserService.InvalidPasswordException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
     }
 
     /**
@@ -163,6 +163,6 @@ public class UserController {
     @ExceptionHandler(UserService.WeakPasswordException.class)
     public ResponseEntity<Map<String, String>> handleWeakPassword(UserService.WeakPasswordException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
     }
 }

@@ -157,7 +157,15 @@ public class UserService {
         if (password.length() < 8) {
             throw new WeakPasswordException("Password must be at least 8 characters long");
         }
-        // 可以添加更多规则：大小写、数字、特殊字符等
+        if (password.contains(" ")) {
+            throw new WeakPasswordException("Password must not contain spaces");
+        }
+        if (!password.matches(".*[A-Za-z].*")) {
+            throw new WeakPasswordException("Password must contain at least one letter");
+        }
+        if (!password.matches(".*\\d.*")) {
+            throw new WeakPasswordException("Password must contain at least one digit");
+        }
     }
 
     /**
@@ -166,7 +174,7 @@ public class UserService {
     public static class UserNotFoundException extends BusinessException {
 
         public UserNotFoundException(String message) {
-            super(message);
+            super("user.not_found", message);
         }
     }
 
@@ -176,7 +184,7 @@ public class UserService {
     public static class EmailAlreadyExistsException extends BusinessException {
 
         public EmailAlreadyExistsException(String message) {
-            super(message);
+            super("user.email_exists", message);
         }
     }
 
@@ -186,7 +194,7 @@ public class UserService {
     public static class UsernameAlreadyExistsException extends BusinessException {
 
         public UsernameAlreadyExistsException(String message) {
-            super(message);
+            super("user.username_exists", message);
         }
     }
 
@@ -196,7 +204,7 @@ public class UserService {
     public static class InvalidPasswordException extends BusinessException {
 
         public InvalidPasswordException(String message) {
-            super(message);
+            super("user.invalid_password", message);
         }
     }
 
@@ -206,7 +214,7 @@ public class UserService {
     public static class WeakPasswordException extends BusinessException {
 
         public WeakPasswordException(String message) {
-            super(message);
+            super("user.weak_password", message);
         }
     }
 }

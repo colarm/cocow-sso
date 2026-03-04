@@ -217,7 +217,7 @@ public class ClientController {
     }
 
     /**
-     * 处理客户端已存在异常
+     * .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
      */
     @ExceptionHandler(ClientService.ClientAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleClientAlreadyExists(ClientService.ClientAlreadyExistsException ex) {
@@ -226,7 +226,7 @@ public class ClientController {
     }
 
     /**
-     * 处理无效Scope异常
+     * .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
      */
     @ExceptionHandler(ClientService.InvalidScopeException.class)
     public ResponseEntity<Map<String, String>> handleInvalidScope(ClientService.InvalidScopeException ex) {
@@ -235,7 +235,7 @@ public class ClientController {
     }
 
     /**
-     * 处理管理员权限不足异常
+     * .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
      */
     @ExceptionHandler(AdminAccessRequiredException.class)
     public ResponseEntity<Map<String, String>> handleAdminAccessRequired(AdminAccessRequiredException ex) {
@@ -244,7 +244,7 @@ public class ClientController {
     }
 
     /**
-     * 处理客户端管理权限不足异常
+     * .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
      */
     @ExceptionHandler(ClientManagementAccessRequiredException.class)
     public ResponseEntity<Map<String, String>> handleClientManagementAccessRequired(ClientManagementAccessRequiredException ex) {
@@ -253,7 +253,7 @@ public class ClientController {
     }
 
     /**
-     * 处理客户端访问被拒绝异常
+     * .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
      */
     @ExceptionHandler(ClientAccessDeniedException.class)
     public ResponseEntity<Map<String, String>> handleClientAccessDenied(ClientAccessDeniedException ex) {
@@ -262,7 +262,7 @@ public class ClientController {
     }
 
     /**
-     * 管理员权限不足异常
+     * .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
      */
     public static class AdminAccessRequiredException extends RuntimeException {
 

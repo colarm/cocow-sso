@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -40,7 +39,6 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(
             @RequestBody RegisterRequest request,
-            @RequestParam(value = "rememberMe", defaultValue = "false") boolean rememberMe,
             HttpServletRequest httpRequest,
             HttpServletResponse response
     ) {
@@ -52,20 +50,13 @@ public class AuthController {
         session.setAttribute("username", authResult.username());
         session.setAttribute("userRole", authResult.role());
 
-        // 根据 rememberMe 设置 Session 超时时间
-        if (rememberMe) {
-            session.setMaxInactiveInterval(30 * 24 * 60 * 60); // 30天
-        } else {
-            session.setMaxInactiveInterval(30 * 60); // 30分钟
-        }
+        // 默认 Session 超时时间
+        session.setMaxInactiveInterval(30 * 24 * 60 * 60); // 30天
 
         // 返回响应
         Map<String, Object> result = new HashMap<>();
         result.put("username", authResult.username());
         result.put("message", "Registration successful");
-        if (rememberMe) {
-            result.put("rememberMe", true);
-        }
         return ResponseEntity.ok(result);
     }
 
@@ -75,7 +66,6 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(
             @RequestBody LoginRequest request,
-            @RequestParam(value = "rememberMe", defaultValue = "false") boolean rememberMe,
             HttpServletRequest httpRequest,
             HttpServletResponse response
     ) {
@@ -87,20 +77,13 @@ public class AuthController {
         session.setAttribute("username", authResult.username());
         session.setAttribute("userRole", authResult.role());
 
-        // 根据 rememberMe 设置 Session 超时时间
-        if (rememberMe) {
-            session.setMaxInactiveInterval(30 * 24 * 60 * 60); // 30天
-        } else {
-            session.setMaxInactiveInterval(30 * 60); // 30分钟
-        }
+        // 默认 Session 超时时间
+        session.setMaxInactiveInterval(30 * 60); // 30分钟
 
         // 返回响应
         Map<String, Object> result = new HashMap<>();
         result.put("username", authResult.username());
         result.put("message", "Login successful");
-        if (rememberMe) {
-            result.put("rememberMe", true);
-        }
         return ResponseEntity.ok(result);
     }
 
@@ -126,7 +109,7 @@ public class AuthController {
     @ExceptionHandler(AuthService.UsernameAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleUsernameAlreadyExists(AuthService.UsernameAlreadyExistsException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
     }
 
     /**
@@ -135,7 +118,7 @@ public class AuthController {
     @ExceptionHandler(AuthService.EmailAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleEmailAlreadyExists(AuthService.EmailAlreadyExistsException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
     }
 
     /**
@@ -144,7 +127,7 @@ public class AuthController {
     @ExceptionHandler(AuthService.InvalidCredentialsException.class)
     public ResponseEntity<Map<String, String>> handleInvalidCredentials(AuthService.InvalidCredentialsException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
     }
 
     /**
@@ -153,7 +136,7 @@ public class AuthController {
     @ExceptionHandler(AuthService.AccountLockedException.class)
     public ResponseEntity<Map<String, String>> handleAccountLocked(AuthService.AccountLockedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
     }
 
     /**
@@ -162,7 +145,7 @@ public class AuthController {
     @ExceptionHandler(AuthService.AccountDisabledException.class)
     public ResponseEntity<Map<String, String>> handleAccountDisabled(AuthService.AccountDisabledException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
     }
 
     /**
@@ -171,6 +154,6 @@ public class AuthController {
     @ExceptionHandler(UserService.UserNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleUserNotFound(UserService.UserNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(Map.of("error", ex.getMessage()));
+                .body(Map.of("code", ex.getCode(), "message", ex.getMessage()));
     }
 }
