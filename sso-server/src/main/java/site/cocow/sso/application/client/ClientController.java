@@ -107,6 +107,20 @@ public class ClientController {
     }
 
     /**
+     * 通过 OAuth2 string clientId 查询客户端基本信息（clientName）
+     * 供授权同意页面展示，任何已登录用户均可访问，无需管理员权限
+     */
+    @GetMapping("/info/{clientId}")
+    public ResponseEntity<Map<String, Object>> getClientInfo(
+            HttpServletRequest request,
+            @PathVariable String clientId
+    ) {
+        Map<String, Object> info = clientService.getClientInfoByClientId(
+                Objects.requireNonNull(clientId, "clientId is required"));
+        return ResponseEntity.ok(info);
+    }
+
+    /**
      * 列出所有客户端
      */
     @GetMapping

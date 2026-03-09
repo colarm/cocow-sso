@@ -2,7 +2,6 @@ package site.cocow.sso.application.oauth;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -11,13 +10,14 @@ import org.springframework.lang.NonNull;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.view.RedirectView;
 
 import jakarta.servlet.http.HttpSession;
+import site.cocow.sso.application.oauth.dto.AuthorizeGrantRequest;
 import site.cocow.sso.application.oauth.dto.IntrospectionResponse;
 import site.cocow.sso.application.oauth.dto.JwksResponse;
 import site.cocow.sso.application.oauth.dto.OidcDiscoveryResponse;
@@ -50,62 +50,51 @@ public class OAuth2Controller {
     }
 
     /**
-     * 授权端点 - OAuth2 授权码流程的起点 GET /oauth/authorize
+     * 授权端点 POST /api/v1/oauth/authorize
+     *
+     * 整个授权流程由 SSO 前端完成： 1. 客户端将浏览器重定向到 SSO 前端 /oauth/authorize?... 2. 前端捕获参数 →
+     * 引导用户登录 → 展示授权同意页 3. 用户点击「允许」后，前端将参数以 JSON Body POST 到此接口 4.
+     * 后端验证、生成授权码，将完整回调 URI 以 JSON 返回给前端 5. 前端执行 window.location.href
+     * 跳转，浏览器永不直接访问后端授权端点
      */
-    @GetMapping("/authorize")
-    public RedirectView authorize(
-            @RequestParam("response_type") @NonNull String responseType,
-            @RequestParam("client_id") @NonNull String clientId,
-            @RequestParam("redirect_uri") @NonNull String redirectUri,
-            @RequestParam(value = "scope", required = false, defaultValue = "openid profile email") String scope,
-            @RequestParam(value = "state", required = false) String state,
-            @RequestParam(value = "code_challenge", required = false) String codeChallenge,
-            @RequestParam(value = "code_challenge_method", required = false, defaultValue = "S256") String codeChallengeMethod,
+    @PostMapping("/authorize")
+    public ResponseEntity<Map<String, String>> grantAuthorization(
+            @RequestBody AuthorizeGrantRequest request,
             HttpSession session
     ) {
-        // 1. 验证 response_type
-        if (!"code".equals(responseType)) {
-            return new RedirectView(redirectUri + "?error=unsupported_response_type&state=" + (state != null ? state : ""));
-        }
-
-        // 2. 检查用户是否已登录
+        // 1. 检查用户是否已登录
         Long userId = (Long) session.getAttribute("userId");
         if (userId == null) {
-            // 未登录，重定向到登录页面，携带原始授权请求参数
-            String loginRedirect = String.format("/login?redirect=/oauth/authorize?response_type=%s&client_id=%s&redirect_uri=%s&scope=%s&state=%s&code_challenge=%s&code_challenge_method=%s",
-                    responseType, clientId, redirectUri, scope, state != null ? state : "",
-                    codeChallenge != null ? codeChallenge : "", codeChallengeMethod);
-            return new RedirectView(Objects.requireNonNull(loginRedirect));
+            throw new OAuth2Service.NotAuthenticatedException("User is not authenticated");
         }
 
-        try {
-            // 3. 验证客户端（仅验证 client_id，不验证 secret）
-            Client client = oauth2Service.validateClientById(clientId);
-
-            // 4. 验证 redirect_uri
-            oauth2Service.validateRedirectUri(client, redirectUri);
-
-            // 5. 生成授权码
-            AuthorizationCode authCode = oauth2Service.generateAuthorizationCode(
-                    clientId, userId, redirectUri, scope, state, codeChallenge, codeChallengeMethod
-            );
-
-            // 6. 重定向回客户端，携带授权码
-            String redirectUrl = redirectUri + "?code=" + authCode.getCode();
-            if (state != null && !state.isBlank()) {
-                redirectUrl += "&state=" + state;
-            }
-
-            return new RedirectView(redirectUrl);
-
-        } catch (OAuth2Service.InvalidClientException e) {
-            return new RedirectView(redirectUri + "?error=invalid_client&error_description=" + e.getMessage() + "&state=" + (state != null ? state : ""));
-        } catch (OAuth2Service.InvalidRedirectUriException e) {
-            // redirect_uri 无效时不能重定向到该 URI，返回错误页面
-            throw e;
-        } catch (Exception e) {
-            return new RedirectView(redirectUri + "?error=server_error&error_description=" + e.getMessage() + "&state=" + (state != null ? state : ""));
+        // 2. 验证 response_type
+        if (!"code".equals(request.responseType())) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "unsupported_response_type",
+                            "error_description", "Only response_type=code is supported"));
         }
+
+        // 3. 验证客户端
+        Client client = oauth2Service.validateClientById(request.clientId());
+
+        // 4. 验证 redirect_uri
+        oauth2Service.validateRedirectUri(client, request.redirectUri());
+
+        // 5. 生成授权码
+        AuthorizationCode authCode = oauth2Service.generateAuthorizationCode(
+                request.clientId(), userId, request.redirectUri(),
+                request.scope(), request.state(),
+                request.codeChallenge(), request.codeChallengeMethod()
+        );
+
+        // 6. 拼接回调 URI 并以 JSON 返回 — 由前端负责最终跳转
+        String redirectUrl = request.redirectUri() + "?code=" + authCode.getCode();
+        if (request.state() != null && !request.state().isBlank()) {
+            redirectUrl += "&state=" + request.state();
+        }
+
+        return ResponseEntity.ok(Map.of("redirectUri", redirectUrl));
     }
 
     /**
@@ -205,6 +194,15 @@ public class OAuth2Controller {
         Map<String, Object> jwk = jwtTokenService.getJwksKey();
         JwksResponse response = new JwksResponse(List.of(jwk));
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 处理用户未登录异常（前端负责跳转到登录页）
+     */
+    @ExceptionHandler(OAuth2Service.NotAuthenticatedException.class)
+    public ResponseEntity<Map<String, String>> handleNotAuthenticated(OAuth2Service.NotAuthenticatedException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "login_required", "error_description", ex.getMessage(), "code", ex.getCode()));
     }
 
     /**

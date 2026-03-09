@@ -1,15 +1,17 @@
-FROM eclipse-temurin:25-jdk-alpine AS builder
+FROM maven:3.9-eclipse-temurin-21-alpine AS builder
 
 WORKDIR /app
 
 COPY pom.xml .
+# Pre-download dependencies (cached layer, only invalidated on pom.xml change)
+RUN mvn dependency:go-offline -q
+
 COPY src ./src
 
-RUN apk add --no-cache maven && \
-    mvn clean package -DskipTests && \
+RUN mvn clean package -DskipTests -q && \
     mv target/*.jar app.jar
 
-FROM eclipse-temurin:25-jre-alpine
+FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 

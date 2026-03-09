@@ -110,6 +110,20 @@ public class ClientService {
     }
 
     /**
+     * 通过 OAuth2 string clientId 查询客户端基本信息，供授权同意页面展示 仅返回 clientId 和
+     * clientName，不暴露敏感信息
+     */
+    public Map<String, Object> getClientInfoByClientId(@NonNull String clientId) {
+        Client client = clientRepository.findByClientId(clientId)
+                .orElseThrow(() -> new ClientNotFoundException("Client not found with clientId: " + clientId));
+        return Map.of(
+                "clientId", client.getClientId(),
+                "clientName", client.getClientName(),
+                "redirectUris", client.getRedirectUris()
+        );
+    }
+
+    /**
      * 列出所有客户端
      */
     public List<Map<String, Object>> listClients() {

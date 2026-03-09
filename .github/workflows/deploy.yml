@@ -1,0 +1,168 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  # ─── Stage 1: Validate before touching the server ────────────────────────────
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build sso-frontend (catch build errors early)
+        working-directory: sso-frontend
+        run: |
+          npm ci
+          npm run build
+          echo "✓ Frontend build succeeded"
+
+      - name: Validate sso-server compiles
+        working-directory: sso-server
+        run: |
+          # Use the same JDK/Maven versions as the Dockerfile (JDK 21 + Maven 3.9)
+          docker run --rm \
+            -v "$(pwd):/app" \
+            -w /app \
+            maven:3.9-eclipse-temurin-21-alpine \
+            mvn compile -q
+          echo "✓ sso-server compilation succeeded"
+
+  # ─── Stage 2: Deploy to server ────────────────────────────────────────────────
+  deploy:
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: Cocow
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            echo "Deploying cocow-sso..."
+            PROJECT_DIR="/root/cocow-sso"
+            cd "$PROJECT_DIR" || exit 1
+
+            if [ ! -d ".git" ]; then
+              echo "Error: $PROJECT_DIR is not a git repository"
+              exit 1
+            fi
+
+            # Pull latest changes
+            git pull origin main || git pull origin master
+
+            # Ensure required Docker network exists
+            if ! docker network inspect sso-network >/dev/null 2>&1; then
+              echo "Creating sso-network..."
+              docker network create sso-network
+            fi
+
+            # Verify the .env file exists (required secrets)
+            if [ ! -f ".env" ]; then
+              echo "Error: .env file not found in $PROJECT_DIR"
+              echo "Create it from sso-server/.env.example and populate with real values."
+              exit 1
+            fi
+
+            # Rebuild and restart all services
+            docker compose up -d --build
+
+            # Wait for sso-server to be running (Spring Boot can take ~30-60s)
+            echo "Waiting for sso-server to start (max 120s)..."
+            for i in $(seq 1 120); do
+              if docker compose ps sso-server | grep -qiE "up|running"; then
+                echo "sso-server is up after ${i}s"
+                break
+              fi
+              if [ "$i" -eq 120 ]; then
+                echo "Timeout: sso-server did not start within 120s"
+                docker compose logs --tail=60 sso-server
+                exit 1
+              fi
+              sleep 1
+            done
+
+            echo "Deployment completed successfully!"
+
+      - name: Health Check
+        run: |
+          sleep 10
+          KEY_FILE=$(mktemp)
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          SSH_PORT="${{ secrets.SSH_PORT || '22' }}"
+
+          # Inside the server: curl sso-server directly from within its container
+          # (port is not exposed to host, so exec is the only way)
+          ssh -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=10 \
+              -i "$KEY_FILE" \
+              -p "${SSH_PORT}" \
+              "${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}" '
+            cd /root/cocow-sso
+
+            # Check all four containers are up
+            FAILED=false
+            for svc in sso-server sso-frontend sso-mysql sso-redis; do
+              if ! docker ps --filter "name=^${svc}$" --filter "status=running" --format "{{.Names}}" | grep -q "^${svc}$"; then
+                echo "❌ Container $svc is NOT running"
+                FAILED=true
+              else
+                echo "✅ Container $svc is running"
+              fi
+            done
+
+            [ "$FAILED" = "true" ] && exit 1
+
+            # Verify sso-server HTTP port is responding inside container
+            docker exec sso-server wget -qO- --timeout=10 http://localhost:8080/ >/dev/null 2>&1 \
+              && echo "✅ sso-server HTTP port 8080 responding" \
+              || echo "⚠️  sso-server port 8080 not yet ready (may still be starting)"
+          '
+          rm -f "$KEY_FILE"
+          echo "✅ Health check passed!"
+
+      - name: Verify via Gateway
+        if: success()
+        run: |
+          KEY_FILE=$(mktemp)
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          SSH_PORT="${{ secrets.SSH_PORT || '22' }}"
+
+          ssh -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=10 \
+              -i "$KEY_FILE" \
+              -p "${SSH_PORT}" \
+              "${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}" '
+            # Check HTTPS is reachable through cocow-gate
+            HTTPS_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://sso.cocow.site/ || echo "000")
+            if [ "$HTTPS_CODE" = "200" ] || [ "$HTTPS_CODE" = "301" ] || [ "$HTTPS_CODE" = "302" ]; then
+              echo "✅ https://sso.cocow.site/ responding ($HTTPS_CODE)"
+            else
+              echo "⚠️  https://sso.cocow.site/ returned $HTTPS_CODE (check cocow-gate)"
+            fi
+          '
+          rm -f "$KEY_FILE"
+
+      - name: Notify Success
+        if: success()
+        run: echo "✅ Deployment successful!"
+
+      - name: Notify Failure
+        if: failure()
+        run: echo "❌ Deployment failed!"

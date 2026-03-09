@@ -49,6 +49,7 @@ public class SecurityConstants {
         // OAuth2 客户端管理接口（排除公开的 allowed-scopes）
         ApiConstants.CLIENT_BASE, // POST /clients - 注册
         ApiConstants.CLIENT_BASE + "/", // 列表
+        ApiConstants.CLIENT_BASE + "/info/*", // GET /clients/info/{clientId}
         ApiConstants.CLIENT_BASE + "/*", // GET/PUT/DELETE /clients/{id}
         ApiConstants.CLIENT_BASE + "/*/regenerate-secret", // POST /clients/{id}/regenerate-secret
         ApiConstants.CLIENT_BASE + "/*/enable", // PATCH /clients/{id}/enable

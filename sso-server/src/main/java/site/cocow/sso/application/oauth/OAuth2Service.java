@@ -446,4 +446,14 @@ public class OAuth2Service {
             super("oauth2.pkce_validation", message);
         }
     }
+
+    /**
+     * 用户未登录异常（由前端负责跳转到登录页）
+     */
+    public static class NotAuthenticatedException extends BusinessException {
+
+        public NotAuthenticatedException(String message) {
+            super("oauth2.not_authenticated", message);
+        }
+    }
 }

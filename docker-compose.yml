@@ -1,15 +1,8 @@
-# ⚠️  此文件已合并到根目录，请勿在此处启动
-# 请使用项目根目录的 docker-compose.yml：
-#
-#   cd ..              # 进入 cocow-sso/
-#   docker compose up -d
-#
-# ──────────────────────────────────────────
-
 services:
+  # SSO Server (Spring Boot)
   sso-server:
     build:
-      context: .
+      context: ./sso-server
       dockerfile: docker/Dockerfile
     container_name: sso-server
     expose:
@@ -26,6 +19,18 @@ services:
     networks:
       - sso-network
 
+  # SSO Frontend (Vue 3 static files, proxy handled by cocow-gate)
+  sso-frontend:
+    build: ./sso-frontend
+    container_name: sso-frontend
+    expose:
+      - 8080
+    depends_on:
+      - sso-server
+    networks:
+      - sso-network
+
+  # MySQL Database
   mysql:
     image: mysql:8.0
     container_name: sso-mysql
@@ -43,6 +48,7 @@ services:
     networks:
       - sso-network
 
+  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: sso-redis
@@ -60,4 +66,5 @@ volumes:
 
 networks:
   sso-network:
-    driver: bridge
+    external: true
+    name: sso-network
