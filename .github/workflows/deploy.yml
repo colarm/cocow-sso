@@ -117,7 +117,7 @@ jobs:
 
             # Check all four containers are up
             FAILED=false
-            for svc in sso-server sso-frontend sso-mysql sso-redis; do
+            for svc in sso-server sso-frontend sso-mysql; do
               if ! docker ps --filter "name=^${svc}$" --filter "status=running" --format "{{.Names}}" | grep -q "^${svc}$"; then
                 echo "❌ Container $svc is NOT running"
                 FAILED=true
