@@ -17,8 +17,8 @@ WORKDIR /app
 
 COPY --from=builder /app/app.jar .
 
-RUN addgroup -g 1000 sso && \
-    adduser -D -u 1000 -G sso sso && \
+RUN groupadd -g 1000 sso && \
+    useradd -u 1000 -g sso -m -d /app -s /usr/sbin/nologin sso && \
     chown -R sso:sso /app
 
 USER sso
