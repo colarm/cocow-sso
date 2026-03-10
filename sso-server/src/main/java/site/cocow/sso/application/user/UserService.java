@@ -67,7 +67,7 @@ public class UserService {
 
         // profile scope - 基本用户信息
         if (scopes.contains("profile")) {
-            claims.put("preferred_username", user.getUsername());
+            claims.put("username", user.getUsername());
             claims.put("updated_at", user.getUpdatedAt() != null
                     ? user.getUpdatedAt().toString() : user.getCreatedAt().toString());
         }
@@ -75,7 +75,7 @@ public class UserService {
         // email scope - 邮箱信息
         if (scopes.contains("email")) {
             claims.put("email", user.getEmail());
-            claims.put("email_verified", user.getEnabled()); // 简化：enabled 表示邮箱已验证
+            claims.put("enabled", user.getEnabled()); // 简化：enabled 表示邮箱已验证
         }
 
         return claims;
