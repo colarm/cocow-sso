@@ -17,8 +17,9 @@ WORKDIR /app
 
 COPY --from=builder /app/app.jar .
 
-RUN groupadd -g 1000 sso && \
-    useradd -u 1000 -g sso -m -d /app -s /usr/sbin/nologin sso && \
+RUN set -eux; \
+    if ! getent group sso >/dev/null; then groupadd -r sso; fi; \
+    if ! id -u sso >/dev/null 2>&1; then useradd -r -g sso -d /app -s /usr/sbin/nologin sso; fi; \
     chown -R sso:sso /app
 
 USER sso
