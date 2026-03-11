@@ -56,7 +56,9 @@ public class SecurityConstants {
         ApiConstants.CLIENT_BASE + "/*/disable", // PATCH /clients/{id}/disable
         // OAuth2 需要用户登录的端点
         ApiConstants.OAUTH_BASE + "/authorize",
-        ApiConstants.OAUTH_BASE + "/userinfo",};
+        ApiConstants.OAUTH_BASE + "/userinfo",
+        // 管理员接口
+        ApiConstants.ADMIN_BASE + "/**",};
 
     /**
      * 可选认证的接口路径（尝试获取用户信息，但不强制要求登录） 适用于：首页、公开内容等场景

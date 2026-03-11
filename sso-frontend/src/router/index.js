@@ -26,6 +26,24 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: "/settings",
+    name: "Settings",
+    component: () => import("../views/SettingsView.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/clients",
+    name: "Clients",
+    component: () => import("../views/ClientsView.vue"),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/admin",
+    name: "Admin",
+    component: () => import("../views/AdminView.vue"),
+    meta: { requiresAuth: true, adminOnly: true },
+  },
+  {
     // OAuth2 / OIDC authorization endpoint — receives the client redirect
     path: "/oauth/authorize",
     name: "Authorize",
@@ -75,6 +93,10 @@ router.beforeEach(async (to) => {
   // ── Standard guards ──────────────────────────────────────────────────────
   if (to.meta.requiresAuth && !auth.isAuthenticated()) {
     return { name: "Login" };
+  }
+
+  if (to.meta.adminOnly && auth.user?.role !== "ADMIN") {
+    return { name: "Dashboard" };
   }
 
   if (to.meta.guestOnly && auth.isAuthenticated()) {

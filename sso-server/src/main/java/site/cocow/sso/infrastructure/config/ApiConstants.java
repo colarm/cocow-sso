@@ -35,6 +35,11 @@ public class ApiConstants {
      */
     public static final String CLIENT_BASE = API_V1 + "/client";
 
+    /**
+     * 管理员端点
+     */
+    public static final String ADMIN_BASE = API_V1 + "/admin";
+
     private ApiConstants() {
         // 工具类，禁止实例化
     }

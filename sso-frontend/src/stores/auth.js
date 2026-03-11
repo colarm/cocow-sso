@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { authApi, userApi } from "../api/auth.js";
+import { authApi } from "../api/auth.js";
+import { userApi } from "../api/user.js";
 
 export const useAuthStore = defineStore("auth", () => {
   const user = ref(null); // { id, username, email, enabled, locked, createdAt }
@@ -65,6 +66,57 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
+  async function updateInfo(username, email) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const res = await userApi.updateInfo({ username, email });
+      user.value = { ...user.value, ...res.data };
+      return { success: true };
+    } catch (e) {
+      error.value =
+        e.response?.data?.message || e.response?.data || "Update failed";
+      return { success: false };
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function changePassword(oldPassword, newPassword) {
+    loading.value = true;
+    error.value = null;
+    try {
+      await userApi.changePassword({ oldPassword, newPassword });
+      return { success: true };
+    } catch (e) {
+      error.value =
+        e.response?.data?.message ||
+        e.response?.data ||
+        "Password change failed";
+      return { success: false };
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function deleteAccount(password) {
+    loading.value = true;
+    error.value = null;
+    try {
+      await userApi.deleteAccount({ password });
+      user.value = null;
+      return { success: true };
+    } catch (e) {
+      error.value =
+        e.response?.data?.message ||
+        e.response?.data ||
+        "Account deletion failed";
+      return { success: false };
+    } finally {
+      loading.value = false;
+    }
+  }
+
   const isAuthenticated = () => !!user.value;
 
   return {
@@ -75,6 +127,9 @@ export const useAuthStore = defineStore("auth", () => {
     register,
     logout,
     fetchUser,
+    updateInfo,
+    changePassword,
+    deleteAccount,
     isAuthenticated,
     clearError,
   };

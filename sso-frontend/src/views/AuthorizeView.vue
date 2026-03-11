@@ -92,7 +92,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { useOidcStore } from '../stores/oidc.js'
-import { clientApi, oauthApi } from '../api/auth.js'
+import { clientApi } from '../api/client.js'
+import { oauthApi } from '../api/oauth.js'
 
 const store  = useAuthStore()
 const oidc   = useOidcStore()
