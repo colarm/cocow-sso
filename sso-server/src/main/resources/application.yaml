@@ -55,6 +55,11 @@ server:
   port: 8848
   servlet:
     context-path: /
+    session:
+      cookie:
+        http-only: true # JS 不可读取
+        secure: false # 开发环境走 HTTP，生产环境由 application-prod.yaml 覆盖为 true
+        same-site: strict # 防止跨站请求携带 Cookie
   ssl:
     enabled: false
     # 生产环境启用 TLS 1.3

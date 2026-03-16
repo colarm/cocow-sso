@@ -3,6 +3,10 @@
 
 server:
   port: 8080 # Docker 内部端口，与 docker-compose expose 及 nginx upstream 一致
+  servlet:
+    session:
+      cookie:
+        secure: true # 生产环境通过 HTTPS nginx 代理，启用 Secure 属性
 
 spring:
   datasource:

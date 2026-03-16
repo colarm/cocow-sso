@@ -39,6 +39,7 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(
             @RequestBody RegisterRequest request,
+            @org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "false") boolean rememberMe,
             HttpServletRequest httpRequest,
             HttpServletResponse response
     ) {
@@ -50,8 +51,8 @@ public class AuthController {
         session.setAttribute("username", authResult.username());
         session.setAttribute("userRole", authResult.role());
 
-        // 默认 Session 超时时间
-        session.setMaxInactiveInterval(30 * 24 * 60 * 60); // 30天
+        // rememberMe=true：30天；默认：30分钟
+        session.setMaxInactiveInterval(rememberMe ? 30 * 24 * 60 * 60 : 30 * 60);
 
         // 返回响应
         Map<String, Object> result = new HashMap<>();
@@ -66,6 +67,7 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(
             @RequestBody LoginRequest request,
+            @org.springframework.web.bind.annotation.RequestParam(required = false, defaultValue = "false") boolean rememberMe,
             HttpServletRequest httpRequest,
             HttpServletResponse response
     ) {
@@ -77,8 +79,8 @@ public class AuthController {
         session.setAttribute("username", authResult.username());
         session.setAttribute("userRole", authResult.role());
 
-        // 默认 Session 超时时间
-        session.setMaxInactiveInterval(30 * 60); // 30分钟
+        // rememberMe=true：30天；默认：30分钟
+        session.setMaxInactiveInterval(rememberMe ? 30 * 24 * 60 * 60 : 30 * 60);
 
         // 返回响应
         Map<String, Object> result = new HashMap<>();
